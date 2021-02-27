@@ -39,6 +39,9 @@ async def on_ready():
     bot.voice = find(lambda x: x.id == config["voice"], bot.guild.channels)
     bot.chat = find(lambda x: x.id == config["chat"], bot.guild.channels)
 
+    bot.start_time = datetime.datetime.strptime(config["start_time"], "%H:%M:%S").time()
+    bot.end_time = datetime.datetime.strptime(config["end_time"], "%H:%M:%S").time()
+
     print("loop started")
 
     # run main loop
@@ -70,6 +73,8 @@ async def stop(ctx):
     config["guild"] = bot.guild.id
     config["voice"] = bot.voice.id
     config["chat"] = bot.chat.id
+    config["start_time"] = bot.start_time.strftime("%H:%M:%S")
+    config["end_time"] = bot.end_time.strftime("%H:%M:%S")
     with open(config_file, "w") as fo:
         json.dump(config, fo, indent=2)
     await bot.logout()
