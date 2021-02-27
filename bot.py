@@ -38,6 +38,18 @@ async def on_ready():
     logger.info("ready!")
 
 
+@bot.command(brief="Stop the bot")
+async def stop(ctx):
+    # TODO: save updated config
+    config["morning_club"] = [user.id for user in bot.morning_club]
+    config["guild"] = bot.guild.id
+    config["voice"] = bot.voice.id
+    config["chat"] = bot.chat.id
+    with open("config.json", "w") as fo:
+        json.dump(config, fo, indent=2)
+    await bot.logout()
+
+
 @bot.command(brief="Add users to the morning club")
 async def add_users(ctx, users: commands.Greedy[discord.Member]):
     for user in users:
@@ -50,18 +62,6 @@ async def list_users(ctx):
         await ctx.channel.send(", ".join([x.display_name for x in bot.morning_club]))
     else:
         await ctx.channel.send("no members")
-
-
-@bot.command(brief="Stop the bot")
-async def stop(ctx):
-    # TODO: save updated config
-    await bot.logout()
-
-
-@bot.event
-async def on_voice_state_update(member, before, after):
-    # TODO: only add during set time
-    bot.morning_club.add(member)
 
 
 if __name__ == "__main__":
