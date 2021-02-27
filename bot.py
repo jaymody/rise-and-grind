@@ -137,5 +137,14 @@ async def set_times(ctx, start_time: str, end_time: str):
         await ctx.channel.send(e)
 
 
+@bot.command(brief="Set text channel")
+async def set_text_channel(ctx, chat: discord.TextChannel):
+    """
+    !set_text_channel #some_text_channel
+    """
+    bot.chat = chat
+    await ctx.channel.send(f"text channel set to {bot.chat.name}")
+
+
 if __name__ == "__main__":
     bot.run(config["token"])
