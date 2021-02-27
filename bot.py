@@ -82,6 +82,7 @@ async def add_users(ctx, users: commands.Greedy[discord.Member]):
     """
     for user in users:
         bot.morning_club.add(user)
+        await ctx.channel.send(f"{user.display_name} welcome to the club!")
 
 
 @bot.command(brief="Get morning club info")
