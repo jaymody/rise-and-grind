@@ -1,14 +1,10 @@
-import os
-import sys
 import json
-import time
 import asyncio
 import logging
 import datetime
-import zoneinfo
 
 import discord
-from discord.ext import commands, tasks
+from discord.ext import commands
 from discord.utils import find
 
 # logging
