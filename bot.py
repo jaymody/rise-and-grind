@@ -85,6 +85,21 @@ async def add_users(ctx, users: commands.Greedy[discord.Member]):
         await ctx.channel.send(f"{user.display_name} welcome to the club!")
 
 
+@bot.command(brief="Remove users from the morning club")
+async def remove_users(ctx, users: commands.Greedy[discord.Member]):
+    """
+    Example 1:
+    !remove_users @Some_user
+
+    Example 2:
+    !remove_users @some_user @another_user
+    """
+    for user in users:
+        if user in bot.morning_club:
+            bot.morning_club.remove(user)
+            await ctx.channel.send(f"{user.display_name} left the club ;(")
+
+
 @bot.command(brief="Get morning club info")
 async def info(ctx):
     """
