@@ -34,8 +34,7 @@ async def on_ready():
     bot.voice = find(lambda x: x.id == config["voice"], bot.guild.channels)
     bot.chat = find(lambda x: x.id == config["chat"], bot.guild.channels)
 
-    bot.start_time = datetime.time(12, 2, 30)
-    bot.end_time = datetime.time(12, 9)
+    print("loop started")
 
     # run main loop
     while True:
