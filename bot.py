@@ -102,5 +102,17 @@ async def info(ctx):
     await ctx.channel.send(f"end time: {bot.end_time}")
 
 
+@bot.command(brief="Set start and end times HH:MM:SS (24 hour format)")
+async def set_times(ctx, start_time: str, end_time: str):
+    try:
+        bot.start_time = datetime.datetime.strptime(start_time, "%H:%M:%S").time()
+        bot.end_time = datetime.datetime.strptime(end_time, "%H:%M:%S").time()
+        await ctx.channel.send(
+            f"new start/end times set to: {bot.start_time} - {bot.end_time}"
+        )
+    except ValueError as e:
+        await ctx.channel.send(e)
+
+
 if __name__ == "__main__":
     bot.run(config["token"])
