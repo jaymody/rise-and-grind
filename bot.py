@@ -1,3 +1,4 @@
+import os
 import json
 import asyncio
 import argparse
@@ -14,8 +15,11 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--dev", action="store_true")
 args = parser.parse_args()
 
-config_file = "test_config.json" if args.dev else "config.json"
-with open(config_file) as fi:
+if args.dev:
+    os.environ["CONFIGFILE"] = os.environ["TEST_CONFIGFILE"]
+    os.environ["DISCORD_GUILD"] = os.environ["TEST_DISCORD_GUILD"]
+
+with open(os.environ["CONFIGFILE"]) as fi:
     config = json.load(fi)
 
 # TODO: only use necessary intents
@@ -25,10 +29,10 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 @bot.event
 async def on_ready():
-    bot.morning_club = set(map(bot.get_user, config["morning_club"]))
-    bot.guild = find(lambda x: x.id == config["guild"], bot.guilds)
+    bot.guild = find(lambda x: x.id == int(os.environ["DISCORD_GUILD"]), bot.guilds)
     bot.voice = find(lambda x: x.id == config["voice"], bot.guild.channels)
     bot.chat = find(lambda x: x.id == config["chat"], bot.guild.channels)
+    bot.morning_club = set(map(bot.get_user, config["morning_club"]))
 
     bot.start_time = datetime.datetime.strptime(config["start_time"], "%H:%M:%S").time()
     bot.end_time = datetime.datetime.strptime(config["end_time"], "%H:%M:%S").time()
@@ -66,7 +70,7 @@ async def stop(ctx):
     config["chat"] = bot.chat.id
     config["start_time"] = bot.start_time.strftime("%H:%M:%S")
     config["end_time"] = bot.end_time.strftime("%H:%M:%S")
-    with open(config_file, "w") as fo:
+    with open(os.environ["CONFIGFILE"], "w") as fo:
         json.dump(config, fo, indent=2)
     await bot.logout()
 
@@ -156,4 +160,4 @@ async def set_voice_channel(ctx, voice: discord.VoiceChannel):
 
 
 if __name__ == "__main__":
-    bot.run(config["token"])
+    bot.run(os.environ["DISCORD_TOKEN"])
