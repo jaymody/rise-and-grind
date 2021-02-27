@@ -2,10 +2,13 @@ import os
 import sys
 import json
 import time
+import asyncio
 import logging
+import datetime
+import zoneinfo
 
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 from discord.utils import find
 
 # logging
@@ -28,6 +31,17 @@ intents = discord.Intents().all()
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 
+def current_time():
+    return datetime.datetime.now().time()
+
+
+def in_time_range(start, now, end):
+    if start < end:
+        return now >= start and now <= end
+    else:  # time interval crosses midnight
+        return now >= start or now <= end
+
+
 @bot.event
 async def on_ready():
     # TODO: better load config
@@ -35,7 +49,27 @@ async def on_ready():
     bot.guild = find(lambda x: x.id == config["guild"], bot.guilds)
     bot.voice = find(lambda x: x.id == config["voice"], bot.guild.channels)
     bot.chat = find(lambda x: x.id == config["chat"], bot.guild.channels)
-    logger.info("ready!")
+
+    bot.start_time = datetime.time(12, 2, 30)
+    bot.end_time = datetime.time(12, 9)
+
+    logger.info("loop started")
+
+    # run main loop
+    while True:
+        attended = {k: False for k in bot.morning_club}
+        while not in_time_range(bot.start_time, current_time(), bot.end_time):
+            await asyncio.sleep(5)
+
+        while in_time_range(bot.start_time, current_time(), bot.end_time):
+            for member in bot.voice.members:
+                attended[member] = True
+            await bot.chat.send(f"{attended}")
+            await asyncio.sleep(5)
+
+        for user, is_awake in attended.items():
+            if not is_awake:
+                await bot.chat.send(f"{user.mention} lacked! For shame")
 
 
 @bot.command(brief="Stop the bot")
