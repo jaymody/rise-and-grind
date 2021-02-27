@@ -7,6 +7,8 @@ import discord
 from discord.ext import commands
 from discord.utils import find
 
+from utils import current_time, in_time_range
+
 # config
 parser = argparse.ArgumentParser()
 parser.add_argument("--dev", action="store_true")
@@ -19,17 +21,6 @@ with open(config_file) as fi:
 # TODO: only use necessary intents
 intents = discord.Intents().all()
 bot = commands.Bot(command_prefix="!", intents=intents)
-
-
-def current_time():
-    return datetime.datetime.now().time()
-
-
-def in_time_range(start, now, end):
-    if start < end:
-        return now >= start and now <= end
-    else:  # time interval crosses midnight
-        return now >= start or now <= end
 
 
 @bot.event
