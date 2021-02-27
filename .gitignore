@@ -1,5 +1,6 @@
 ### Project ###
 config.json
+test_config.json
 discord.log
 data.csv
 todo.md
