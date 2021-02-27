@@ -1,6 +1,6 @@
 import json
 import asyncio
-import logging
+import argparse
 import datetime
 
 import discord
@@ -8,7 +8,12 @@ from discord.ext import commands
 from discord.utils import find
 
 # config
-with open("config.json") as fi:
+parser = argparse.ArgumentParser()
+parser.add_argument("--dev", type=bool, default=False)
+args = parser.parse_args()
+
+config_file = "test_config.json" if args.dev else "config.json"
+with open(config_file) as fi:
     config = json.load(fi)
 
 # TODO: only use necessary intents
@@ -65,7 +70,7 @@ async def stop(ctx):
     config["guild"] = bot.guild.id
     config["voice"] = bot.voice.id
     config["chat"] = bot.chat.id
-    with open("config.json", "w") as fo:
+    with open(config_file, "w") as fo:
         json.dump(config, fo, indent=2)
     await bot.logout()
 
