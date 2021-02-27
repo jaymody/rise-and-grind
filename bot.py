@@ -9,7 +9,7 @@ from discord.utils import find
 
 # config
 parser = argparse.ArgumentParser()
-parser.add_argument("--dev", type=bool, default=False)
+parser.add_argument("--dev", action="store_true")
 args = parser.parse_args()
 
 config_file = "test_config.json" if args.dev else "config.json"
