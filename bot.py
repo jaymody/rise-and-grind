@@ -40,7 +40,6 @@ def in_time_range(start, now, end):
 
 @bot.event
 async def on_ready():
-    # TODO: better load config
     bot.morning_club = set(map(bot.get_user, config["morning_club"]))
     bot.guild = find(lambda x: x.id == config["guild"], bot.guilds)
     bot.voice = find(lambda x: x.id == config["voice"], bot.guild.channels)
@@ -70,7 +69,10 @@ async def on_ready():
 
 @bot.command(brief="Stop the bot")
 async def stop(ctx):
-    # TODO: save updated config
+    """
+    Example:
+    !stop
+    """
     config["morning_club"] = [user.id for user in bot.morning_club]
     config["guild"] = bot.guild.id
     config["voice"] = bot.voice.id
@@ -82,12 +84,23 @@ async def stop(ctx):
 
 @bot.command(brief="Add users to the morning club")
 async def add_users(ctx, users: commands.Greedy[discord.Member]):
+    """
+    Example 1:
+    !add_users @Some_user
+
+    Example 2:
+    !add_users @some_user @another_user
+    """
     for user in users:
         bot.morning_club.add(user)
 
 
 @bot.command(brief="Get morning club info")
 async def info(ctx):
+    """
+    Example:
+    !info
+    """
     # club members
     await ctx.channel.send(
         f"morning club members: {', '.join([x.display_name for x in bot.morning_club])}"
@@ -104,6 +117,13 @@ async def info(ctx):
 
 @bot.command(brief="Set start and end times HH:MM:SS (24 hour format)")
 async def set_times(ctx, start_time: str, end_time: str):
+    """
+    Example 1:
+    !set_times 06:30:00 - 07:00:00
+
+    Example 2:
+    !set_times 18:30:00 - 18:45:00
+    """
     try:
         bot.start_time = datetime.datetime.strptime(start_time, "%H:%M:%S").time()
         bot.end_time = datetime.datetime.strptime(end_time, "%H:%M:%S").time()
