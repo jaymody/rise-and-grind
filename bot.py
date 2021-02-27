@@ -86,12 +86,20 @@ async def add_users(ctx, users: commands.Greedy[discord.Member]):
         bot.morning_club.add(user)
 
 
-@bot.command(brief="List users in the morning club")
-async def list_users(ctx):
-    if bot.morning_club:
-        await ctx.channel.send(", ".join([x.display_name for x in bot.morning_club]))
-    else:
-        await ctx.channel.send("no members")
+@bot.command(brief="Get morning club info")
+async def info(ctx):
+    # club members
+    await ctx.channel.send(
+        f"morning club members: {', '.join([x.display_name for x in bot.morning_club])}"
+    )
+
+    # voice and chat channels
+    await ctx.channel.send(f"voice channel: {bot.voice.name}")
+    await ctx.channel.send(f"chat channel: {bot.chat.name}")
+
+    # start and end times
+    await ctx.channel.send(f"start time: {bot.start_time}")
+    await ctx.channel.send(f"end time: {bot.end_time}")
 
 
 if __name__ == "__main__":
