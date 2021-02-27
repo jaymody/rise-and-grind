@@ -64,7 +64,9 @@ async def on_ready():
 
         for user, is_awake in attended.items():
             if not is_awake:
-                await bot.chat.send(f"{user.mention} lacked! For shame")
+                await bot.chat.send(
+                    f"{user.mention}, you didn't wake up today eh. Big lack."
+                )
 
 
 @bot.command(brief="Stop the bot")
