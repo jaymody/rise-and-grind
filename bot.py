@@ -7,17 +7,6 @@ import discord
 from discord.ext import commands
 from discord.utils import find
 
-# logging
-logger = logging.getLogger("discord")
-logger.setLevel(logging.INFO)
-formatter = logging.Formatter("%(asctime)s:%(levelname)s:%(name)s: %(message)s")
-fh = logging.FileHandler(filename="discord.log", encoding="utf-8", mode="w")
-sh = logging.StreamHandler()
-fh.setFormatter(formatter)
-sh.setFormatter(formatter)
-logger.addHandler(fh)
-logger.addHandler(sh)
-
 # config
 with open("config.json") as fi:
     config = json.load(fi)
@@ -47,8 +36,6 @@ async def on_ready():
 
     bot.start_time = datetime.time(12, 2, 30)
     bot.end_time = datetime.time(12, 9)
-
-    logger.info("loop started")
 
     # run main loop
     while True:
