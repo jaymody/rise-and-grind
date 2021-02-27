@@ -146,5 +146,14 @@ async def set_text_channel(ctx, chat: discord.TextChannel):
     await ctx.channel.send(f"text channel set to {bot.chat.name}")
 
 
+@bot.command(brief="Set voice channel")
+async def set_voice_channel(ctx, voice: discord.VoiceChannel):
+    """
+    !set_voice_channel <#ID_OF_VOICE_CHANNEL>
+    """
+    bot.voice = voice
+    await ctx.channel.send(f"text channel set to {bot.voice.name}")
+
+
 if __name__ == "__main__":
     bot.run(config["token"])
