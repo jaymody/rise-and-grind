@@ -10,17 +10,12 @@ from discord.utils import find
 
 from utils import current_time, in_time_range
 
-# config
+# dev/test mode
 parser = argparse.ArgumentParser()
 parser.add_argument("--dev", action="store_true")
 args = parser.parse_args()
-
 if args.dev:
-    os.environ["CONFIGFILE"] = os.environ["TEST_CONFIGFILE"]
     os.environ["DISCORD_GUILD"] = os.environ["TEST_DISCORD_GUILD"]
-
-with open(os.environ["CONFIGFILE"]) as fi:
-    config = json.load(fi)
 
 # TODO: only use necessary intents
 intents = discord.Intents().all()
@@ -29,21 +24,58 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 @bot.event
 async def on_ready():
+    bot.guild = None
+    print("ready!")
+
+
+@bot.command(brief="Initialize stuff")
+async def init(
+    ctx,
+    chat: discord.TextChannel = None,
+    voice: discord.VoiceChannel = None,
+    start_time: str = "07:00:00",
+    end_time: str = "07:30:00",
+):
+    """
+    Example 1: (defaults and find "morning-club" channels)
+    !init
+
+    Example 2: (time defaults)
+    !init #text-channel <#VOICE_CHANNEL_ID>
+
+    Example 3:
+    !init #text-channel <#VOICE_CHANNEL_ID> HH:MM:SS HH:MM:SS
+    """
+    if bot.guild:
+        await ctx.channel.send("rise and grind already initialized")
+        return
+
     bot.guild = find(lambda x: x.id == int(os.environ["DISCORD_GUILD"]), bot.guilds)
-    bot.voice = find(lambda x: x.id == config["voice"], bot.guild.channels)
-    bot.chat = find(lambda x: x.id == config["chat"], bot.guild.channels)
-    bot.morning_club = set(map(bot.get_user, config["morning_club"]))
+    bot.chat = chat
+    bot.voice = voice
+    if not chat:
+        bot.chat = find(
+            lambda x: isinstance(x, discord.TextChannel)
+            and x.name.lower() == "morning-club",
+            bot.guild.channels,
+        )
+    if not voice:
+        bot.voice = find(
+            lambda x: isinstance(x, discord.VoiceChannel)
+            and x.name.lower() == "morning-club",
+            bot.guild.channels,
+        )
 
-    bot.start_time = datetime.datetime.strptime(config["start_time"], "%H:%M:%S").time()
-    bot.end_time = datetime.datetime.strptime(config["end_time"], "%H:%M:%S").time()
+    bot.start_time = datetime.datetime.strptime(start_time, "%H:%M:%S").time()
+    bot.end_time = datetime.datetime.strptime(end_time, "%H:%M:%S").time()
+    bot.morning_club = set()
 
-    print("loop started")
-
-    # run main loop
+    await ctx.channel.send("starting loop, run !info for more info")
     while True:
         attended = {k: False for k in bot.morning_club}
+        # TODO: calculate delta time and sleep for that instead of periodically
         while not in_time_range(bot.start_time, current_time(), bot.end_time):
-            await asyncio.sleep(5)
+            await asyncio.sleep(10)
 
         while in_time_range(bot.start_time, current_time(), bot.end_time):
             for member in bot.voice.members:
@@ -59,19 +91,11 @@ async def on_ready():
 
 
 @bot.command(brief="Stop the bot")
-async def stop(ctx):
+async def shutdown(ctx):
     """
     Example:
-    !stop
+    !shutdown
     """
-    config["morning_club"] = [user.id for user in bot.morning_club]
-    config["guild"] = bot.guild.id
-    config["voice"] = bot.voice.id
-    config["chat"] = bot.chat.id
-    config["start_time"] = bot.start_time.strftime("%H:%M:%S")
-    config["end_time"] = bot.end_time.strftime("%H:%M:%S")
-    with open(os.environ["CONFIGFILE"], "w") as fo:
-        json.dump(config, fo, indent=2)
     await bot.logout()
 
 
