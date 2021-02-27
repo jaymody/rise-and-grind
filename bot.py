@@ -106,18 +106,16 @@ async def info(ctx):
     Example:
     !info
     """
-    # club members
-    await ctx.channel.send(
-        f"morning club members: {', '.join([x.display_name for x in bot.morning_club])}"
+    message = (
+        "--- info ---\n"
+        f"morning club members: {', '.join([x.display_name for x in bot.morning_club])}\n\n"
+        f"voice channel: {bot.voice.name}\n"
+        f"chat channel: {bot.chat.name}\n\n"
+        f"start time: {bot.start_time}\n"
+        f"end time: {bot.end_time}\n"
     )
-
-    # voice and chat channels
-    await ctx.channel.send(f"voice channel: {bot.voice.name}")
-    await ctx.channel.send(f"chat channel: {bot.chat.name}")
-
-    # start and end times
-    await ctx.channel.send(f"start time: {bot.start_time}")
-    await ctx.channel.send(f"end time: {bot.end_time}")
+    # club members
+    await ctx.channel.send(message)
 
 
 @bot.command(brief="Set start and end times HH:MM:SS (24 hour format)")
