@@ -241,10 +241,11 @@ class RiseNGrind(commands.Cog):
         !add @janedoe 06:30:00 7:00:00 yes
         !add @janedoe 12:00:00 13:00:00 no
         """
-        if user in self.members:
+        _exists = await self.db.fetch(f"SELECT * FROM members WHERE mid = $1;", user.id)
+        if _exists:
             await ctx.channel.send(
-                f"{user.display_name} is already in the club, please remove and "
-                "re-add them if you want to change the settings"
+                f"{user.display_name} is already in the club, please use the "
+                "update command instead"
             )
             return
 
@@ -255,13 +256,16 @@ class RiseNGrind(commands.Cog):
             await ctx.channel.send(e)
             return
 
-        self.members[user] = {
-            "weekends": weekends,
-            "start_time": start_time,
-            "end_time": end_time,
-            "woke_up": False,
-            "active": False,
-        }
+        async with self.db.transaction():
+            await self.db.execute(
+                "INSERT INTO members "
+                "(mid, start_time, end_time, active, weekends) "
+                f"VALUES ($1, $2, $3, false, $4);",
+                user.id,
+                start_time,
+                end_time,
+                weekends,
+            )
         await ctx.channel.send(f"Welcome to the club {user.display_name}!")
 
     @commands.command(brief="Remove user from the morning club")
