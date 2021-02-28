@@ -4,6 +4,7 @@ import asyncio
 import argparse
 import datetime
 
+import asyncpg
 import discord
 from discord.ext import commands
 from discord.utils import find
@@ -25,6 +26,10 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 @bot.event
 async def on_ready():
     """Loads guild, chat, and voice. Attempts to infer voice and chat channels."""
+    # check if bot has already been initialized
+    if hasattr(bot, "guild"):
+        return
+
     bot.guild = find(lambda x: x.id == int(os.environ["DISCORD_GUILD"]), bot.guilds)
     bot.chat = find(
         lambda x: isinstance(x, discord.TextChannel)
@@ -37,12 +42,39 @@ async def on_ready():
         bot.guild.channels,
     )
     bot.members = {}
+    # database connector
+    bot.db = await asyncpg.connect(
+        database=os.environ["DB_NAME"],
+        user=os.environ["DB_USER"],
+        password=os.environ["DB_PASS"],
+        host=os.environ["DB_HOST"],
+        port=os.environ["DB_PORT"],
+    )
     print("ready!")
+
+
+@bot.command(brief="Temp test command for db.")
+async def query(ctx):
+    result = await bot.db.fetch("SELECT * FROM members")
+    await ctx.channel.send(result)
+
+
+@bot.command(brief="Temp test command for db.")
+async def insert(ctx, i: int):
+    async with bot.db.transaction():
+        await bot.db.execute(
+            "INSERT INTO members "
+            "(mid, start_time, end_time, active, weekends) "
+            f"VALUES ({i}, '06:00:00', '06:30:30', false, false);"
+        )
+
+    await ctx.channel.send("insert to table successful")
 
 
 @bot.command(brief="Shuts down the bot")
 async def shutdown(ctx):
     """Shuts down the bot"""
+    await bot.db.close()
     await bot.logout()
 
 
@@ -240,4 +272,12 @@ async def set_voice_channel(ctx, voice: discord.VoiceChannel):
 
 
 if __name__ == "__main__":
-    bot.run(os.environ["DISCORD_TOKEN"])
+    loop = asyncio.get_event_loop()
+    try:
+        loop.run_until_complete(bot.start(os.environ["DISCORD_TOKEN"]))
+    except KeyboardInterrupt:
+        loop.run_until_complete(bot.db.close())
+        loop.run_until_complete(bot.logout())
+        print("\n\ngraceful interrupt")
+    finally:
+        loop.close()
