@@ -276,17 +276,17 @@ class RiseNGrind(commands.Cog):
         --------
         !remove @janedoe
         """
-        if user not in self.members:
+        _exists = await self.db.fetch(f"SELECT * FROM members WHERE mid = $1;", user.id)
+        if not _exists:
             await ctx.channel.send(f"{user.display_name} is not a member")
             return
 
-        if self.members[user]["active"]:
-            await ctx.channel.send(
-                f"please deactivate {user.display_name} before removing"
+        async with self.db.transaction():
+            await self.db.execute(
+                "DELETE FROM members WHERE mid = $1;",
+                user.id,
             )
-            return
 
-        del self.members[user]
         await ctx.channel.send(f"{user.display_name} left the club ;(")
 
     @commands.command(brief="Get morning club info")
