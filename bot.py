@@ -8,7 +8,7 @@ import discord
 from discord.ext import commands
 from discord.utils import find
 
-from utils import current_time, in_time_range
+from utils import current_time, current_date, in_time_range, is_a_weekend
 
 # dev/test mode
 parser = argparse.ArgumentParser()
@@ -65,23 +65,23 @@ async def activate(ctx, user: discord.Member):
     bot.members[user]["active"] = True
     await ctx.channel.send(f"{user.display_name} is now active")
     while True:
-        # TODO: this loop logic is eye bleach, I should replace it
+        #### CAUTION ####
+        # TODO: this loop logic is eye bleach, it is very very bad
         # ideally, you wanna use something built into discord.py
         # like tasks.loop or something similar
-        # TODO: add logic for weekends
 
-        # wait for time interval to occur
+        # wait for a valid interval to occur
         while (
             not in_time_range(
                 bot.members[user]["start_time"],
                 current_time(),
                 bot.members[user]["end_time"],
             )
-            and bot.members[user]["active"]
-        ):
-            await asyncio.sleep(10)
+            or (not bot.members[user]["weekends"] and is_a_weekend(current_date()))
+        ) and bot.members[user]["active"]:
+            await asyncio.sleep(20)
 
-        # during time interval, check if user joins the voice channel
+        # during a valid time interval, check if user joins the voice channel
         while (
             in_time_range(
                 bot.members[user]["start_time"],
@@ -94,7 +94,7 @@ async def activate(ctx, user: discord.Member):
             if user in bot.voice.members and not bot.members[user]["woke_up"]:
                 bot.members[user]["woke_up"] = True
                 await bot.chat.send(f"Good morning {user.mention}!")
-            await asyncio.sleep(10)
+            await asyncio.sleep(20)
 
         # if deactivate was called stop the loop and reset vars
         if not bot.members[user]["active"]:
