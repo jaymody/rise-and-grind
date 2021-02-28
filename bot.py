@@ -24,151 +24,204 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 @bot.event
 async def on_ready():
-    bot.guild = None
+    """Loads guild, chat, and voice. Attempts to infer voice and chat channels."""
+    bot.guild = find(lambda x: x.id == int(os.environ["DISCORD_GUILD"]), bot.guilds)
+    bot.chat = find(
+        lambda x: isinstance(x, discord.TextChannel)
+        and x.name.lower() == "morning-club",
+        bot.guild.channels,
+    )
+    bot.voice = find(
+        lambda x: isinstance(x, discord.VoiceChannel)
+        and x.name.lower() == "morning-club",
+        bot.guild.channels,
+    )
+    bot.members = {}
     print("ready!")
 
 
-@bot.command(brief="Initialize stuff")
-async def init(
-    ctx,
-    chat: discord.TextChannel = None,
-    voice: discord.VoiceChannel = None,
-    start_time: str = "07:00:00",
-    end_time: str = "07:30:00",
-):
-    """
-    Example 1: (defaults and find "morning-club" channels)
-    !init
-
-    Example 2: (time defaults)
-    !init #text-channel <#VOICE_CHANNEL_ID>
-
-    Example 3:
-    !init #text-channel <#VOICE_CHANNEL_ID> HH:MM:SS HH:MM:SS
-    """
-    if bot.guild:
-        await ctx.channel.send("rise and grind already initialized")
-        return
-
-    bot.guild = find(lambda x: x.id == int(os.environ["DISCORD_GUILD"]), bot.guilds)
-    bot.chat = chat
-    bot.voice = voice
-    if not chat:
-        bot.chat = find(
-            lambda x: isinstance(x, discord.TextChannel)
-            and x.name.lower() == "morning-club",
-            bot.guild.channels,
-        )
-    if not voice:
-        bot.voice = find(
-            lambda x: isinstance(x, discord.VoiceChannel)
-            and x.name.lower() == "morning-club",
-            bot.guild.channels,
-        )
-
-    bot.start_time = datetime.datetime.strptime(start_time, "%H:%M:%S").time()
-    bot.end_time = datetime.datetime.strptime(end_time, "%H:%M:%S").time()
-    bot.morning_club = set()
-
-    await ctx.channel.send("starting loop, run !info for more info")
-    while True:
-        attended = {k: False for k in bot.morning_club}
-        # TODO: calculate delta time and sleep for that instead of periodically
-        while not in_time_range(bot.start_time, current_time(), bot.end_time):
-            await asyncio.sleep(10)
-
-        while in_time_range(bot.start_time, current_time(), bot.end_time):
-            for member in bot.voice.members:
-                attended[member] = True
-            await bot.chat.send(f"{attended}")
-            await asyncio.sleep(5)
-
-        for user, is_awake in attended.items():
-            if not is_awake:
-                await bot.chat.send(
-                    f"{user.mention}, you didn't wake up today eh. Big lack."
-                )
-
-
-@bot.command(brief="Stop the bot")
+@bot.command(brief="Shuts down the bot")
 async def shutdown(ctx):
-    """
-    Example:
-    !shutdown
-    """
+    """Shuts down the bot"""
     await bot.logout()
 
 
-@bot.command(brief="Add users to the morning club")
-async def add_users(ctx, users: commands.Greedy[discord.Member]):
-    """
-    Example 1:
-    !add_users @Some_user
+@bot.command(brief="Activate tracking for a user")
+async def activate(ctx, user: discord.Member):
+    """Activate tracking for a user
 
-    Example 2:
-    !add_users @some_user @another_user
+    Examples
+    --------
+    !activate @janedoe
     """
-    for user in users:
-        bot.morning_club.add(user)
-        await ctx.channel.send(f"{user.display_name} welcome to the club!")
+    if user not in bot.members:
+        await ctx.channel.send(f"{user.display_name} is not a member")
+        return
+
+    if bot.members[user]["active"]:
+        await ctx.channel.send(f"{user.display_name} is already active")
+        return
+
+    bot.members[user]["active"] = True
+    await ctx.channel.send(f"{user.display_name} is now active")
+    while True:
+        # TODO: this loop logic is eye bleach, I should replace it
+        # ideally, you wanna use something built into discord.py
+        # like tasks.loop or something similar
+        # TODO: add logic for weekends
+
+        # wait for time interval to occur
+        while (
+            not in_time_range(
+                bot.members[user]["start_time"],
+                current_time(),
+                bot.members[user]["end_time"],
+            )
+            and bot.members[user]["active"]
+        ):
+            await asyncio.sleep(10)
+
+        # during time interval, check if user joins the voice channel
+        while (
+            in_time_range(
+                bot.members[user]["start_time"],
+                current_time(),
+                bot.members[user]["end_time"],
+            )
+            and bot.members[user]["active"]
+        ):
+            # say good morning if they've joined the voice channel (only do it once)
+            if user in bot.voice.members and not bot.members[user]["woke_up"]:
+                bot.members[user]["woke_up"] = True
+                await bot.chat.send(f"Good morning {user.mention}!")
+            await asyncio.sleep(10)
+
+        # if deactivate was called stop the loop and reset vars
+        if not bot.members[user]["active"]:
+            bot.members[user]["active"] = False
+            bot.members[user]["woke_up"] = False
+            return
+
+        # if they never joined the voice channel, then send an passive aggressive message
+        if not bot.members[user]["woke_up"]:
+            await bot.chat.send(
+                f"{user.mention}, you didn't wake up today eh. Big lack."
+            )
+
+        # reset variable that tracks if they woke up (ie joined the voice channel)
+        bot.members[user]["woke_up"] = False
 
 
-@bot.command(brief="Remove users from the morning club")
-async def remove_users(ctx, users: commands.Greedy[discord.Member]):
-    """
-    Example 1:
-    !remove_users @Some_user
+@bot.command(brief="Deactivate tracking for a user")
+async def deactivate(ctx, user: discord.Member):
+    """Deactivate tracking for a user
 
-    Example 2:
-    !remove_users @some_user @another_user
+    Examples
+    --------
+    !deactivate @janedoe
     """
-    for user in users:
-        if user in bot.morning_club:
-            bot.morning_club.remove(user)
-            await ctx.channel.send(f"{user.display_name} left the club ;(")
+    if user not in bot.members:
+        await ctx.channel.send(f"{user.display_name} is not a member")
+        return
+
+    if not bot.members[user]["active"]:
+        await ctx.channel.send(f"{user.display_name} is already inactive")
+        return
+
+    bot.members[user]["active"] = False
+    await ctx.channel.send(
+        "deactivating may take up to a minute, "
+        f"use '!info {user.display_name}' after a minute check if they were deactivated"
+    )
+
+
+@bot.command(brief="Add user to the morning club")
+async def add(
+    ctx, user: discord.Member, start_time: str, end_time: str, weekends: bool
+):
+    """Adds user to the morning club
+
+    Examples
+    --------
+    !add @janedoe 06:30:00 7:00:00 yes
+    !add @janedoe 12:00:00 13:00:00 no
+    """
+    if user in bot.members:
+        await ctx.channel.send(
+            f"{user.display_name} is already in the club, please remove and "
+            "re-add them if you want to change the settings"
+        )
+        return
+
+    try:
+        start_time = datetime.datetime.strptime(start_time, "%H:%M:%S").time()
+        end_time = datetime.datetime.strptime(end_time, "%H:%M:%S").time()
+    except ValueError as e:
+        await ctx.channel.send(e)
+        return
+
+    bot.members[user] = {
+        "weekends": weekends,
+        "start_time": start_time,
+        "end_time": end_time,
+        "woke_up": False,
+        "active": False,
+    }
+    await ctx.channel.send(f"Welcome to the club {user.display_name}!")
+
+
+@bot.command(brief="Remove user from the morning club")
+async def remove(ctx, user: discord.Member):
+    """Remove user from the morning club
+
+    Examples
+    --------
+    !remove @janedoe
+    """
+    if user not in bot.members:
+        await ctx.channel.send(f"{user.display_name} is not a member")
+        return
+
+    if bot.members[user]["active"]:
+        await ctx.channel.send(f"please deactivate {user.display_name} before removing")
+        return
+
+    del bot.members[user]
+    await ctx.channel.send(f"{user.display_name} left the club ;(")
 
 
 @bot.command(brief="Get morning club info")
-async def info(ctx):
-    """
-    Example:
+async def info(ctx, user: discord.Member = None):
+    """Get info about the morning club
+
+    Examples
+    --------
     !info
-    """
-    message = (
-        "--- info ---\n"
-        f"morning club members: {', '.join([x.display_name for x in bot.morning_club])}\n\n"
-        f"voice channel: {bot.voice.name}\n"
-        f"chat channel: {bot.chat.name}\n\n"
-        f"start time: {bot.start_time}\n"
-        f"end time: {bot.end_time}\n"
-    )
-    # club members
-    await ctx.channel.send(message)
 
-
-@bot.command(brief="Set start and end times HH:MM:SS (24 hour format)")
-async def set_times(ctx, start_time: str, end_time: str):
+    !info @janedoe
     """
-    Example 1:
-    !set_times 06:30:00 - 07:00:00
-
-    Example 2:
-    !set_times 18:30:00 - 18:45:00
-    """
-    try:
-        bot.start_time = datetime.datetime.strptime(start_time, "%H:%M:%S").time()
-        bot.end_time = datetime.datetime.strptime(end_time, "%H:%M:%S").time()
-        await ctx.channel.send(
-            f"new start/end times set to: {bot.start_time} - {bot.end_time}"
+    if not user:
+        message = (
+            "**--- Morning Club Info ---**\n"
+            f"**Voice Channel:** {bot.voice.name}\n"
+            f"**Chat Channel:** {bot.chat.name}\n"
+            f"**Members:** {', '.join([x.display_name for x in bot.members])}\n"
         )
-    except ValueError as e:
-        await ctx.channel.send(e)
+    else:
+        if user not in bot.members:
+            await ctx.channel.send(f"{user.display_name} is not a member")
+            return
+        message = f"**--- {user.display_name} ---**\n{json.dumps(bot.members[user], indent=2, default=str)}"
+    await ctx.channel.send(message)
 
 
 @bot.command(brief="Set text channel")
 async def set_text_channel(ctx, chat: discord.TextChannel):
-    """
-    !set_text_channel #some_text_channel
+    """Set text channel
+
+    Examples
+    --------
+    !set_text_channel #text-channel
     """
     bot.chat = chat
     await ctx.channel.send(f"text channel set to {bot.chat.name}")
@@ -176,8 +229,11 @@ async def set_text_channel(ctx, chat: discord.TextChannel):
 
 @bot.command(brief="Set voice channel")
 async def set_voice_channel(ctx, voice: discord.VoiceChannel):
-    """
-    !set_voice_channel <#ID_OF_VOICE_CHANNEL>
+    """Set voice channel
+
+    Examples
+    --------
+    !set_voice_channel <#VOICE_CHANNEL_ID>
     """
     bot.voice = voice
     await ctx.channel.send(f"text channel set to {bot.voice.name}")
