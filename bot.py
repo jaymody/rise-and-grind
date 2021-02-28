@@ -57,6 +57,59 @@ class RiseNGrind(commands.Cog):
             host=self.db_host,
             port=self.db_port,
         )
+
+        # TODO: add logger for the db stuff
+        # create tables if they don't exist
+        await self.db.execute(
+            """
+        CREATE TABLE IF NOT EXISTS members (
+            mid BIGINT NOT NULL,
+            start_time TIME(0) NOT NULL,
+            end_time TIME(0) NOT NULL,
+            active BOOLEAN NOT NULL,
+            weekends BOOLEAN NOT NULL,
+            PRIMARY KEY (mid)
+        );
+        """
+        )
+        await self.db.execute(
+            """
+        CREATE TABLE IF NOT EXISTS mornings (
+            mid BIGINT NOT NULL,
+            date DATE NOT NULL,
+            woke_up BOOLEAN NOT NULL DEFAULT false,
+            FOREIGN KEY (mid) REFERENCES members ON DELETE CASCADE,
+            PRIMARY KEY (mid, date)
+        );
+        """
+        )
+        await self.db.execute(
+            """
+        CREATE TABLE IF NOT EXISTS configs (
+            cid INTEGER NOT NULL,
+            text_channel BIGINT,
+            voice_channel BIGINT,
+            PRIMARY KEY (cid)
+        );
+        """
+        )
+
+        self.chat = None
+        self.voice = None
+
+        config = await self.db.fetchrow(f"SELECT * FROM configs WHERE cid = 0;")
+        if not config:  # create blank config entry if it does not exists
+            await self.db.execute("""INSERT INTO configs (cid) values (0);""")
+        else:  # otherwise load from config
+            if config["text_channel"]:
+                self.chat = find(
+                    lambda x: x.id == config["text_channel"], self.guild.channels
+                )
+            if config["voice_channel"]:
+                self.voice = find(
+                    lambda x: x.id == config["voice_channel"], self.guild.channels
+                )
+
         print("ready!")
 
     async def close(self):
