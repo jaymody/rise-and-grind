@@ -121,6 +121,7 @@ class RiseNGrind(commands.Cog):
         await bot.close()
 
     async def track(self, user):
+        """Main tracking logic for mornings."""
         print(user.display_name)
         today = current_date()
         morning = await self.db.fetchrow(
@@ -146,10 +147,13 @@ class RiseNGrind(commands.Cog):
         data = await self.db.fetchrow("SELECT * FROM members WHERE mid = $1;", user.id)
         assert data is not None
 
-        if in_time_range(
-            data["start_time"],
-            current_time(),
-            data["end_time"],
+        if (
+            in_time_range(
+                data["start_time"],
+                current_time(),
+                data["end_time"],
+            )
+            and user in self.voice.members
         ):
             if not morning["woke_up"]:
                 async with self.db.transaction():
