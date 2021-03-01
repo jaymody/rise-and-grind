@@ -125,7 +125,7 @@ class RiseNGrind(commands.Cog):
         """Main tracking logic for mornings."""
         # TODO: add weekend logic
         async with self.db.acquire() as con:
-            print(user.display_name)
+            # print(user.display_name)
             today = current_date()
             morning = await con.fetchrow(
                 "SELECT * FROM mornings WHERE mid=$1 AND date=$2",
