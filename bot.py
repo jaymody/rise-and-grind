@@ -122,22 +122,6 @@ class RiseNGrind(commands.Cog):
         await self.close()
         await bot.close()
 
-    @commands.command(brief="Temp test command for db.")
-    async def query(self, ctx):
-        result = await self.db.fetch("SELECT * FROM members")
-        await ctx.channel.send(result)
-
-    @commands.command(brief="Temp test command for db.")
-    async def insert(self, ctx, i: int):
-        async with self.db.transaction():
-            await self.db.execute(
-                "INSERT INTO members "
-                "(mid, start_time, end_time, active, weekends) "
-                f"VALUES ({i}, '06:00:00', '06:30:30', false, false);"
-            )
-
-            await ctx.channel.send("insert to table successful")
-
     @commands.command(brief="Activate tracking for a user")
     async def activate(self, ctx, user: discord.Member):
         """Activate tracking for a user
