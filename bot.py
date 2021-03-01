@@ -37,17 +37,6 @@ class RiseNGrind(commands.Cog):
 
         # find the current guild
         self.guild = find(lambda x: x.id == self.guild_id, bot.guilds)
-        self.chat = find(
-            lambda x: isinstance(x, discord.TextChannel)
-            and x.name.lower() == "morning-club",
-            self.guild.channels,
-        )
-        self.voice = find(
-            lambda x: isinstance(x, discord.VoiceChannel)
-            and x.name.lower() == "morning-club",
-            self.guild.channels,
-        )
-        self.members = {}
 
         # database connector
         self.db = await asyncpg.connect(
