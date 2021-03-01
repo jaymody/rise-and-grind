@@ -1,5 +1,4 @@
 import os
-import json
 import time
 import asyncio
 import argparse
@@ -10,7 +9,7 @@ import discord
 from discord.ext import commands, tasks
 from discord.utils import find
 
-from utils import current_time, current_date, in_time_range, is_a_weekend
+from utils import current_time, current_datetime, in_time_range, is_a_weekend
 
 # TODO
 def check():
@@ -33,6 +32,7 @@ class RiseNGrind(commands.Cog):
         self.chat = None
         self.voice = None
         self.db = None
+        self.loops = None
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -107,7 +107,7 @@ class RiseNGrind(commands.Cog):
 
         self.loops = {}
 
-        print(f"ready {current_date()}")
+        print(f"ready {current_datetime()}")
 
     async def close(self):
         """Closes bot stuff"""
@@ -121,12 +121,24 @@ class RiseNGrind(commands.Cog):
         await self.close()
         await bot.close()
 
-    async def track(self, user):
-        """Main tracking logic for mornings."""
-        # TODO: add weekend logic
+    @commands.Cog.listener()
+    async def on_voice_state_update(self, user, before, after):
+        today = current_datetime()
+        # if not a voice join event
+        if not (before.channel is None and after.channel is not None):
+            return
+        # if not the voice channel we care about
+        if after.channel != self.voice:
+            return
+        # if user has not been activated
+        if user not in self.loops:
+            return
+
         async with self.db.acquire() as con:
-            # print(user.display_name)
-            today = current_date()
+            data = await con.fetchrow("SELECT * FROM members WHERE mid = $1;", user.id)
+            if not data:
+                return
+
             morning = await con.fetchrow(
                 "SELECT * FROM mornings WHERE mid=$1 AND date=$2",
                 user.id,
@@ -145,38 +157,77 @@ class RiseNGrind(commands.Cog):
                         today,
                     )
 
-            # user cannot be removed from database while active, so this should
-            # never be None
-            data = await con.fetchrow("SELECT * FROM members WHERE mid = $1;", user.id)
-            assert data is not None
-
             if (
-                in_time_range(
-                    data["start_time"],
-                    current_time(),
-                    data["end_time"],
-                )
-                and user in self.voice.members
+                in_time_range(data["start_time"], current_time(), data["end_time"])
+                and not morning["notified"]
+                and not morning["woke_up"]
             ):
-                if not morning["woke_up"]:
-                    async with con.transaction():
-                        await con.execute(
-                            "UPDATE mornings SET woke_up=true, notified=true "
-                            "WHERE mid=$1 AND date=$2;",
-                            user.id,
-                            today,
-                        )
-                        await self.chat.send(f"Good morning {user.mention}!")
-            elif not morning["notified"]:
                 async with con.transaction():
                     await con.execute(
-                        "UPDATE mornings SET notified=true WHERE mid=$1 AND date=$2;",
+                        "UPDATE mornings SET woke_up=true, notified=true "
+                        "WHERE mid=$1 AND date=$2;",
                         user.id,
                         today,
                     )
-                await self.chat.send(
-                    f"{user.mention}, you didn't wake up today eh. Big lack."
+                    await self.chat.send(f"Good morning {user.mention}!")
+
+    async def notify(self, user, data):
+        """Main notify logic."""
+        # TODO: add weekend logic
+        while True:
+            today = current_datetime()
+            # wait until tomorrow at end time, I should probably unit test this ...
+            # number of seconds from midnight to end time
+            diff = (
+                datetime.datetime.combine(datetime.date.min, data["end_time"])
+                - datetime.datetime.min
+            )
+            # datetime of tomorrow at end_time (+ 10 seconds for good measure)
+            tmrw = (
+                today.replace(hour=0, minute=0, second=0, microsecond=0)
+                + diff
+                + datetime.timedelta(days=1, seconds=10)
+            )
+            # number of seconds between tmrw and today
+            seconds = (tmrw - today).total_seconds()
+            if seconds > 0:
+                print(seconds)
+                await asyncio.sleep(seconds)
+
+            # NOTE: since the process has been slept for about a day, tmrw is going to be
+            # the current date most likely, unless end_time is very close to midnight
+            # in which case tmrw may be the previous day in which case we have to
+            # use that date when updating mornings
+            async with self.db.acquire() as con:
+                morning = await con.fetchrow(
+                    "SELECT * FROM mornings WHERE mid=$1 AND date=$2",
+                    user.id,
+                    tmrw,
                 )
+                if not morning:
+                    async with con.transaction():
+                        await con.execute(
+                            "INSERT INTO mornings (mid, date) VALUES ($1, $2);",
+                            user.id,
+                            tmrw,
+                        )
+                        morning = await con.fetchrow(
+                            "SELECT * FROM mornings WHERE mid=$1 AND date=$2",
+                            user.id,
+                            tmrw,
+                        )
+
+                # if they haven't woke up, send a passive aggressive message
+                if not morning["notified"]:
+                    async with con.transaction():
+                        await con.execute(
+                            "UPDATE mornings SET notified=true WHERE mid=$1 AND date=$2;",
+                            user.id,
+                            tmrw,
+                        )
+                    await self.chat.send(
+                        f"{user.mention}, you didn't wake up today eh. Big lack."
+                    )
 
     @commands.command(brief="Activate tracking for a user")
     async def activate(self, ctx, user: discord.Member):
@@ -197,9 +248,9 @@ class RiseNGrind(commands.Cog):
             await ctx.channel.send(f"{user.display_name} is already active")
             return
 
-        task = tasks.loop(seconds=5.0)(self.track)
+        task = tasks.loop(count=1)(self.notify)
         self.loops[user] = task
-        task.start(user)
+        task.start(user, data)
         await ctx.channel.send(f"{user.display_name} is now active")
 
     @commands.command(brief="Deactivate tracking for a user")
@@ -212,6 +263,7 @@ class RiseNGrind(commands.Cog):
         """
         async with self.db.acquire() as con:
             data = await con.fetchrow("SELECT * FROM members WHERE mid = $1;", user.id)
+
         if not data:
             await ctx.channel.send(f"{user.display_name} is not a member")
             return
@@ -220,9 +272,9 @@ class RiseNGrind(commands.Cog):
             await ctx.channel.send(f"{user.display_name} is already inactive")
             return
 
-        self.loops[user].stop()
-        await ctx.channel.send(f"{user.display_name} has been dactivated")
+        self.loops[user].cancel()
         del self.loops[user]
+        await ctx.channel.send(f"{user.display_name} has been deactivated")
 
     @commands.command(brief="Fetch mornings data")
     async def data(self, ctx, verbose: bool = None):
