@@ -215,14 +215,18 @@ class RiseNGrind(commands.Cog):
         del self.loops[user]
 
     @commands.command(brief="Fetch mornings data")
-    async def data(self, ctx):
+    async def data(self, ctx, verbose: bool = None):
         await self.db.copy_from_query(
             "SELECT * FROM mornings",
             output="data.csv",
             format="csv",
             header=True,
         )
-        await ctx.channel.send(file=discord.File("data.csv"))
+        if verbose:
+            with open("data.csv") as fi:
+                await ctx.channel.send(fi.read())
+        else:
+            await ctx.channel.send(file=discord.File("data.csv"))
 
     @commands.command(brief="Add user to the morning club")
     async def add(
