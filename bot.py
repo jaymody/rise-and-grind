@@ -216,6 +216,22 @@ class RiseNGrind(commands.Cog):
 
     @commands.command(brief="Fetch mornings data")
     async def data(self, ctx, verbose: bool = None):
+        """Fetch mornings data
+        Usage
+        -----
+        !data <send_as_message (optional)>
+
+        If send as message is set, (yes/t/y/true), then the data is sent as a
+        message
+
+        If it is not set, the data is sent as a csv file
+
+        Examples
+        --------
+        !data
+
+        !data yes
+        """
         await self.db.copy_from_query(
             "SELECT * FROM mornings",
             output="data.csv",
