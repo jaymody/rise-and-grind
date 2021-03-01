@@ -123,6 +123,7 @@ class RiseNGrind(commands.Cog):
 
     async def track(self, user):
         """Main tracking logic for mornings."""
+        # TODO: add weekend logic
         print(user.display_name)
         today = current_date()
         morning = await self.db.fetchrow(
@@ -311,7 +312,7 @@ class RiseNGrind(commands.Cog):
 
         if user in self.loops:
             await ctx.channel.send(
-                f"{user.display_name} please deactivate user before removing"
+                f"please deactivate {user.display_name}  before removing"
             )
             return
 
@@ -322,6 +323,55 @@ class RiseNGrind(commands.Cog):
             )
 
         await ctx.channel.send(f"{user.display_name} left the club ;(")
+
+    @commands.command(brief="Update user settings")
+    async def update(
+        self,
+        ctx,
+        user: discord.Member,
+        start_time: str,
+        end_time: str,
+        weekends: bool,
+    ):
+        """Update user settings
+
+        Examples
+        --------
+        !update @janedoe 06:30:00 7:00:00 yes
+        !update @janedoe 12:00:00 13:00:00 no
+        """
+        _exists = await self.db.fetchrow(
+            "SELECT * FROM members WHERE mid = $1;", user.id
+        )
+        if not _exists:
+            await ctx.channel.send(f"{user.display_name} is not a member")
+            return
+
+        if user in self.loops:
+            await ctx.channel.send(
+                f"please deactivate {user.display_name} before updating"
+            )
+            return
+
+        try:
+            start_time = datetime.datetime.strptime(start_time, "%H:%M:%S").time()
+            end_time = datetime.datetime.strptime(end_time, "%H:%M:%S").time()
+        except ValueError as e:
+            await ctx.channel.send(e)
+            return
+
+        async with self.db.transaction():
+            await self.db.execute(
+                "UPDATE members "
+                "SET start_time=$1, end_time=$2, weekends=$3 "
+                "WHERE mid = $4;",
+                start_time,
+                end_time,
+                weekends,
+                user.id,
+            )
+
+        await ctx.channel.send(f"settings have been updated for {user.display_name}")
 
     @commands.command(brief="Get morning club info")
     async def info(self, ctx, user: discord.Member = None):
