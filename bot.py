@@ -214,6 +214,16 @@ class RiseNGrind(commands.Cog):
         await ctx.channel.send(f"{user.display_name} has been dactivated")
         del self.loops[user]
 
+    @commands.command(brief="Fetch mornings data")
+    async def data(self, ctx):
+        await self.db.copy_from_query(
+            "SELECT * FROM mornings",
+            output="data.csv",
+            format="csv",
+            header=True,
+        )
+        await ctx.channel.send(file=discord.File("data.csv"))
+
     @commands.command(brief="Add user to the morning club")
     async def add(
         self,
