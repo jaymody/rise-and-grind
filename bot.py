@@ -45,7 +45,7 @@ class RiseNGrind(commands.Cog):
         self.guild = find(lambda x: x.id == self.guild_id, bot.guilds)
 
         # database connector
-        self.db = await asyncpg.connect(
+        self.db = await asyncpg.create_pool(
             database=self.db_name,
             user=self.db_user,
             password=self.db_pass,
@@ -124,58 +124,59 @@ class RiseNGrind(commands.Cog):
     async def track(self, user):
         """Main tracking logic for mornings."""
         # TODO: add weekend logic
-        print(user.display_name)
-        today = current_date()
-        morning = await self.db.fetchrow(
-            "SELECT * FROM mornings WHERE mid=$1 AND date=$2",
-            user.id,
-            today,
-        )
-        if not morning:
-            async with self.db.transaction():
-                await self.db.execute(
-                    "INSERT INTO mornings (mid, date) VALUES ($1, $2);",
-                    user.id,
-                    today,
-                )
-                morning = await self.db.fetchrow(
-                    "SELECT * FROM mornings WHERE mid=$1 AND date=$2",
-                    user.id,
-                    today,
-                )
-
-        # user cannot be removed from database while active, so this should
-        # never be None
-        data = await self.db.fetchrow("SELECT * FROM members WHERE mid = $1;", user.id)
-        assert data is not None
-
-        if (
-            in_time_range(
-                data["start_time"],
-                current_time(),
-                data["end_time"],
+        async with self.db.acquire() as con:
+            print(user.display_name)
+            today = current_date()
+            morning = await con.fetchrow(
+                "SELECT * FROM mornings WHERE mid=$1 AND date=$2",
+                user.id,
+                today,
             )
-            and user in self.voice.members
-        ):
-            if not morning["woke_up"]:
-                async with self.db.transaction():
-                    await self.db.execute(
-                        "UPDATE mornings SET woke_up=true, notified=true "
-                        "WHERE mid=$1 AND date=$2;",
+            if not morning:
+                async with con.transaction():
+                    await con.execute(
+                        "INSERT INTO mornings (mid, date) VALUES ($1, $2);",
                         user.id,
                         today,
                     )
-                    await self.chat.send(f"Good morning {user.mention}!")
-        elif not morning["notified"]:
-            async with self.db.transaction():
-                await self.db.execute(
-                    "UPDATE mornings SET notified=true WHERE mid=$1 AND date=$2;",
-                    user.id,
-                    today,
+                    morning = await con.fetchrow(
+                        "SELECT * FROM mornings WHERE mid=$1 AND date=$2",
+                        user.id,
+                        today,
+                    )
+
+            # user cannot be removed from database while active, so this should
+            # never be None
+            data = await con.fetchrow("SELECT * FROM members WHERE mid = $1;", user.id)
+            assert data is not None
+
+            if (
+                in_time_range(
+                    data["start_time"],
+                    current_time(),
+                    data["end_time"],
                 )
-            await self.chat.send(
-                f"{user.mention}, you didn't wake up today eh. Big lack."
-            )
+                and user in self.voice.members
+            ):
+                if not morning["woke_up"]:
+                    async with con.transaction():
+                        await con.execute(
+                            "UPDATE mornings SET woke_up=true, notified=true "
+                            "WHERE mid=$1 AND date=$2;",
+                            user.id,
+                            today,
+                        )
+                        await self.chat.send(f"Good morning {user.mention}!")
+            elif not morning["notified"]:
+                async with con.transaction():
+                    await con.execute(
+                        "UPDATE mornings SET notified=true WHERE mid=$1 AND date=$2;",
+                        user.id,
+                        today,
+                    )
+                await self.chat.send(
+                    f"{user.mention}, you didn't wake up today eh. Big lack."
+                )
 
     @commands.command(brief="Activate tracking for a user")
     async def activate(self, ctx, user: discord.Member):
@@ -185,7 +186,9 @@ class RiseNGrind(commands.Cog):
         --------
         !activate @janedoe
         """
-        data = await self.db.fetchrow("SELECT * FROM members WHERE mid = $1;", user.id)
+        async with self.db.acquire() as con:
+            data = await con.fetchrow("SELECT * FROM members WHERE mid = $1;", user.id)
+
         if not data:
             await ctx.channel.send(f"{user.display_name} is not a member")
             return
@@ -207,7 +210,8 @@ class RiseNGrind(commands.Cog):
         --------
         !deactivate @janedoe
         """
-        data = await self.db.fetchrow("SELECT * FROM members WHERE mid = $1;", user.id)
+        async with self.db.acquire() as con:
+            data = await con.fetchrow("SELECT * FROM members WHERE mid = $1;", user.id)
         if not data:
             await ctx.channel.send(f"{user.display_name} is not a member")
             return
@@ -238,12 +242,13 @@ class RiseNGrind(commands.Cog):
 
         !data yes
         """
-        await self.db.copy_from_query(
-            "SELECT * FROM mornings",
-            output="data.csv",
-            format="csv",
-            header=True,
-        )
+        async with self.db.acquire() as con:
+            await con.copy_from_query(
+                "SELECT * FROM mornings",
+                output="data.csv",
+                format="csv",
+                header=True,
+            )
         if verbose:
             with open("data.csv") as fi:
                 await ctx.channel.send(fi.read())
@@ -266,9 +271,10 @@ class RiseNGrind(commands.Cog):
         !add @janedoe 06:30:00 7:00:00 yes
         !add @janedoe 12:00:00 13:00:00 no
         """
-        _exists = await self.db.fetchrow(
-            "SELECT * FROM members WHERE mid = $1;", user.id
-        )
+        async with self.db.acquire() as con:
+            _exists = await con.fetchrow(
+                "SELECT * FROM members WHERE mid = $1;", user.id
+            )
         if _exists:
             await ctx.channel.send(
                 f"{user.display_name} is already in the club, please use the "
@@ -283,16 +289,17 @@ class RiseNGrind(commands.Cog):
             await ctx.channel.send(e)
             return
 
-        async with self.db.transaction():
-            await self.db.execute(
-                "INSERT INTO members "
-                "(mid, start_time, end_time, weekends) "
-                "VALUES ($1, $2, $3, $4);",
-                user.id,
-                start_time,
-                end_time,
-                weekends,
-            )
+        async with self.db.acquire() as con:
+            async with con.transaction():
+                await con.execute(
+                    "INSERT INTO members "
+                    "(mid, start_time, end_time, weekends) "
+                    "VALUES ($1, $2, $3, $4);",
+                    user.id,
+                    start_time,
+                    end_time,
+                    weekends,
+                )
         await ctx.channel.send(f"Welcome to the club {user.display_name}!")
 
     @commands.command(brief="Remove user from the morning club")
@@ -303,9 +310,10 @@ class RiseNGrind(commands.Cog):
         --------
         !remove @janedoe
         """
-        _exists = await self.db.fetchrow(
-            "SELECT * FROM members WHERE mid = $1;", user.id
-        )
+        async with self.db.acquire() as con:
+            _exists = await con.fetchrow(
+                "SELECT * FROM members WHERE mid = $1;", user.id
+            )
         if not _exists:
             await ctx.channel.send(f"{user.display_name} is not a member")
             return
@@ -316,11 +324,12 @@ class RiseNGrind(commands.Cog):
             )
             return
 
-        async with self.db.transaction():
-            await self.db.execute(
-                "DELETE FROM members WHERE mid = $1;",
-                user.id,
-            )
+        async with self.db.acquire() as con:
+            async with con.transaction():
+                await con.execute(
+                    "DELETE FROM members WHERE mid = $1;",
+                    user.id,
+                )
 
         await ctx.channel.send(f"{user.display_name} left the club ;(")
 
@@ -340,9 +349,10 @@ class RiseNGrind(commands.Cog):
         !update @janedoe 06:30:00 7:00:00 yes
         !update @janedoe 12:00:00 13:00:00 no
         """
-        _exists = await self.db.fetchrow(
-            "SELECT * FROM members WHERE mid = $1;", user.id
-        )
+        async with self.db.acquire() as con:
+            _exists = await con.fetchrow(
+                "SELECT * FROM members WHERE mid = $1;", user.id
+            )
         if not _exists:
             await ctx.channel.send(f"{user.display_name} is not a member")
             return
@@ -360,16 +370,17 @@ class RiseNGrind(commands.Cog):
             await ctx.channel.send(e)
             return
 
-        async with self.db.transaction():
-            await self.db.execute(
-                "UPDATE members "
-                "SET start_time=$1, end_time=$2, weekends=$3 "
-                "WHERE mid = $4;",
-                start_time,
-                end_time,
-                weekends,
-                user.id,
-            )
+        async with self.db.acquire() as con:
+            async with con.transaction():
+                await con.execute(
+                    "UPDATE members "
+                    "SET start_time=$1, end_time=$2, weekends=$3 "
+                    "WHERE mid = $4;",
+                    start_time,
+                    end_time,
+                    weekends,
+                    user.id,
+                )
 
         await ctx.channel.send(f"settings have been updated for {user.display_name}")
 
@@ -384,21 +395,22 @@ class RiseNGrind(commands.Cog):
         !info @janedoe
         """
         # TODO: prettier info stuff
-        if not user:
-            message = "Config: "
-            message += str(await self.db.fetchrow("SELECT * FROM configs WHERE cid=0;"))
-            message += "\n\nActive Members: "
-            message += str([k.display_name for k in self.loops])
-            message += "\n\nMembers: "
-            message += str(await self.db.fetch("SELECT * FROM members;"))
-        else:
-            data = await self.db.fetchrow(
-                "SELECT * FROM members WHERE mid = $1;", user.id
-            )
-            if not data:
-                await ctx.channel.send(f"{user.display_name} is not a member")
-                return
-            message = str(data)
+        async with self.db.acquire() as con:
+            if not user:
+                message = "Config: "
+                message += str(await con.fetchrow("SELECT * FROM configs WHERE cid=0;"))
+                message += "\n\nActive Members: "
+                message += str([k.display_name for k in self.loops])
+                message += "\n\nMembers: "
+                message += str(await con.fetch("SELECT * FROM members;"))
+            else:
+                data = await con.fetchrow(
+                    "SELECT * FROM members WHERE mid = $1;", user.id
+                )
+                if not data:
+                    await ctx.channel.send(f"{user.display_name} is not a member")
+                    return
+                message = str(data)
         await ctx.channel.send(message)
 
     @commands.command(brief="Set text channel")
@@ -409,10 +421,11 @@ class RiseNGrind(commands.Cog):
         --------
         !set_text_channel #text-channel
         """
-        async with self.db.transaction():
-            await self.db.execute(
-                "UPDATE configs SET text_channel=$1 WHERE cid=0;", chat.id
-            )
+        async with self.db.acquire() as con:
+            async with con.transaction():
+                await con.execute(
+                    "UPDATE configs SET text_channel=$1 WHERE cid=0;", chat.id
+                )
         self.chat = chat
         await ctx.channel.send(f"text channel set to {self.chat.name}")
 
@@ -424,10 +437,11 @@ class RiseNGrind(commands.Cog):
         --------
         !set_voice_channel <#VOICE_CHANNEL_ID>
         """
-        async with self.db.transaction():
-            await self.db.execute(
-                "UPDATE configs SET voice_channel=$1 WHERE cid=0;", voice.id
-            )
+        async with self.db.acquire() as con:
+            async with con.transaction():
+                await con.execute(
+                    "UPDATE configs SET voice_channel=$1 WHERE cid=0;", voice.id
+                )
         self.voice = voice
         await ctx.channel.send(f"voice channel set to {self.voice.name}")
 
