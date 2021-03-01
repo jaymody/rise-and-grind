@@ -299,18 +299,19 @@ class RiseNGrind(commands.Cog):
 
         !info @janedoe
         """
+        # TODO: prettier info stuff
         if not user:
-            message = (
-                "**--- Morning Club Info ---**\n"
-                f"**Voice Channel:** {self.voice.name}\n"
-                f"**Chat Channel:** {self.chat.name}\n"
-                f"**Members:** {', '.join([x.display_name for x in self.members])}\n"
-            )
+            message = str(await self.db.fetch("SELECT * FROM members;"))
+            message += "\n"
+            message += str(await self.db.fetchrow("SELECT * FROM configs WHERE cid=0;"))
         else:
-            if user not in self.members:
+            data = await self.db.fetchrow(
+                "SELECT * FROM members WHERE mid = $1;", user.id
+            )
+            if not data:
                 await ctx.channel.send(f"{user.display_name} is not a member")
                 return
-            message = f"**--- {user.display_name} ---**\n{json.dumps(self.members[user], indent=2, default=str)}"
+            message = str(data)
         await ctx.channel.send(message)
 
     @commands.command(brief="Set text channel")
