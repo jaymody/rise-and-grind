@@ -275,21 +275,20 @@ class RiseNGrind(commands.Cog):
             _exists = await con.fetchrow(
                 "SELECT * FROM members WHERE mid = $1;", user.id
             )
-        if _exists:
-            await ctx.channel.send(
-                f"{user.display_name} is already in the club, please use the "
-                "update command instead"
-            )
-            return
+            if _exists:
+                await ctx.channel.send(
+                    f"{user.display_name} is already in the club, please use the "
+                    "update command instead"
+                )
+                return
 
-        try:
-            start_time = datetime.datetime.strptime(start_time, "%H:%M:%S").time()
-            end_time = datetime.datetime.strptime(end_time, "%H:%M:%S").time()
-        except ValueError as e:
-            await ctx.channel.send(e)
-            return
+            try:
+                start_time = datetime.datetime.strptime(start_time, "%H:%M:%S").time()
+                end_time = datetime.datetime.strptime(end_time, "%H:%M:%S").time()
+            except ValueError as e:
+                await ctx.channel.send(e)
+                return
 
-        async with self.db.acquire() as con:
             async with con.transaction():
                 await con.execute(
                     "INSERT INTO members "
@@ -314,17 +313,16 @@ class RiseNGrind(commands.Cog):
             _exists = await con.fetchrow(
                 "SELECT * FROM members WHERE mid = $1;", user.id
             )
-        if not _exists:
-            await ctx.channel.send(f"{user.display_name} is not a member")
-            return
+            if not _exists:
+                await ctx.channel.send(f"{user.display_name} is not a member")
+                return
 
-        if user in self.loops:
-            await ctx.channel.send(
-                f"please deactivate {user.display_name}  before removing"
-            )
-            return
+            if user in self.loops:
+                await ctx.channel.send(
+                    f"please deactivate {user.display_name}  before removing"
+                )
+                return
 
-        async with self.db.acquire() as con:
             async with con.transaction():
                 await con.execute(
                     "DELETE FROM members WHERE mid = $1;",
@@ -353,24 +351,23 @@ class RiseNGrind(commands.Cog):
             _exists = await con.fetchrow(
                 "SELECT * FROM members WHERE mid = $1;", user.id
             )
-        if not _exists:
-            await ctx.channel.send(f"{user.display_name} is not a member")
-            return
+            if not _exists:
+                await ctx.channel.send(f"{user.display_name} is not a member")
+                return
 
-        if user in self.loops:
-            await ctx.channel.send(
-                f"please deactivate {user.display_name} before updating"
-            )
-            return
+            if user in self.loops:
+                await ctx.channel.send(
+                    f"please deactivate {user.display_name} before updating"
+                )
+                return
 
-        try:
-            start_time = datetime.datetime.strptime(start_time, "%H:%M:%S").time()
-            end_time = datetime.datetime.strptime(end_time, "%H:%M:%S").time()
-        except ValueError as e:
-            await ctx.channel.send(e)
-            return
+            try:
+                start_time = datetime.datetime.strptime(start_time, "%H:%M:%S").time()
+                end_time = datetime.datetime.strptime(end_time, "%H:%M:%S").time()
+            except ValueError as e:
+                await ctx.channel.send(e)
+                return
 
-        async with self.db.acquire() as con:
             async with con.transaction():
                 await con.execute(
                     "UPDATE members "
