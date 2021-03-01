@@ -1,5 +1,6 @@
 import os
 import json
+import time
 import asyncio
 import argparse
 import datetime
@@ -106,7 +107,7 @@ class RiseNGrind(commands.Cog):
 
         self.loops = {}
 
-        print("ready!")
+        print(f"ready {current_date()}")
 
     async def close(self):
         """Closes bot stuff"""
@@ -388,6 +389,11 @@ if __name__ == "__main__":
     args = parser.parse_args()
     if args.dev:
         os.environ["DISCORD_GUILD"] = os.environ["TEST_DISCORD_GUILD"]
+
+    # set timezone
+    if "TZ" not in os.environ:
+        os.environ["TZ"] = "UTC"
+    time.tzset()
 
     # discord bot
     # TODO: only use necessary intents
