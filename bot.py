@@ -306,6 +306,10 @@ class RiseNGrind(commands.Cog):
         --------
         !set_text_channel #text-channel
         """
+        async with self.db.transaction():
+            await self.db.execute(
+                "UPDATE configs SET text_channel=$1 WHERE cid=0;", chat.id
+            )
         self.chat = chat
         await ctx.channel.send(f"text channel set to {self.chat.name}")
 
@@ -317,8 +321,12 @@ class RiseNGrind(commands.Cog):
         --------
         !set_voice_channel <#VOICE_CHANNEL_ID>
         """
+        async with self.db.transaction():
+            await self.db.execute(
+                "UPDATE configs SET voice_channel=$1 WHERE cid=0;", voice.id
+            )
         self.voice = voice
-        await ctx.channel.send(f"text channel set to {self.voice.name}")
+        await ctx.channel.send(f"voice channel set to {self.voice.name}")
 
 
 if __name__ == "__main__":
