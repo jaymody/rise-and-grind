@@ -6,10 +6,16 @@ import datetime
 
 import asyncpg
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 from discord.utils import find
 
 from utils import current_time, current_date, in_time_range, is_a_weekend
+
+# TODO
+def check():
+    # check that text and voice channels are set and valid
+    # check that on_ready has run
+    pass
 
 
 class RiseNGrind(commands.Cog):
@@ -25,7 +31,6 @@ class RiseNGrind(commands.Cog):
         self.guild = None
         self.chat = None
         self.voice = None
-        self.members = None
         self.db = None
 
     @commands.Cog.listener()
@@ -55,7 +60,6 @@ class RiseNGrind(commands.Cog):
             mid BIGINT NOT NULL,
             start_time TIME(0) NOT NULL,
             end_time TIME(0) NOT NULL,
-            active BOOLEAN NOT NULL,
             weekends BOOLEAN NOT NULL,
             PRIMARY KEY (mid)
         );
@@ -67,6 +71,7 @@ class RiseNGrind(commands.Cog):
             mid BIGINT NOT NULL,
             date DATE NOT NULL,
             woke_up BOOLEAN NOT NULL DEFAULT false,
+            notified BOOLEAN NOT NULL DEFAULT false,
             FOREIGN KEY (mid) REFERENCES members ON DELETE CASCADE,
             PRIMARY KEY (mid, date)
         );
@@ -86,7 +91,7 @@ class RiseNGrind(commands.Cog):
         self.chat = None
         self.voice = None
 
-        config = await self.db.fetchrow(f"SELECT * FROM configs WHERE cid = 0;")
+        config = await self.db.fetchrow("SELECT * FROM configs WHERE cid = 0;")
         if not config:  # create blank config entry if it does not exists
             await self.db.execute("""INSERT INTO configs (cid) values (0);""")
         else:  # otherwise load from config
@@ -99,10 +104,14 @@ class RiseNGrind(commands.Cog):
                     lambda x: x.id == config["voice_channel"], self.guild.channels
                 )
 
+        self.loops = {}
+
         print("ready!")
 
     async def close(self):
         """Closes bot stuff"""
+        for l in self.loops.values():
+            l.cancel()
         await self.db.close()
 
     @commands.command(brief="Shuts down the bot", pass_context=False)
@@ -110,6 +119,57 @@ class RiseNGrind(commands.Cog):
         """Shuts down the bot"""
         await self.close()
         await bot.close()
+
+    async def track(self, user):
+        print(user.display_name)
+        today = current_date()
+        morning = await self.db.fetchrow(
+            "SELECT * FROM mornings WHERE mid=$1 AND date=$2",
+            user.id,
+            today,
+        )
+        if not morning:
+            async with self.db.transaction():
+                await self.db.execute(
+                    "INSERT INTO mornings (mid, date) VALUES ($1, $2);",
+                    user.id,
+                    today,
+                )
+                morning = await self.db.fetchrow(
+                    "SELECT * FROM mornings WHERE mid=$1 AND date=$2",
+                    user.id,
+                    today,
+                )
+
+        # user cannot be removed from database while active, so this should
+        # never be None
+        data = await self.db.fetchrow("SELECT * FROM members WHERE mid = $1;", user.id)
+        assert data is not None
+
+        if in_time_range(
+            data["start_time"],
+            current_time(),
+            data["end_time"],
+        ):
+            if not morning["woke_up"]:
+                async with self.db.transaction():
+                    await self.db.execute(
+                        "UPDATE mornings SET woke_up=true, notified=true "
+                        "WHERE mid=$1 AND date=$2;",
+                        user.id,
+                        today,
+                    )
+                    await self.chat.send(f"Good morning {user.mention}!")
+        elif not morning["notified"]:
+            async with self.db.transaction():
+                await self.db.execute(
+                    "UPDATE mornings SET notified=true WHERE mid=$1 AND date=$2;",
+                    user.id,
+                    today,
+                )
+            await self.chat.send(
+                f"{user.mention}, you didn't wake up today eh. Big lack."
+            )
 
     @commands.command(brief="Activate tracking for a user")
     async def activate(self, ctx, user: discord.Member):
@@ -119,62 +179,19 @@ class RiseNGrind(commands.Cog):
         --------
         !activate @janedoe
         """
-        if user not in self.members:
+        data = await self.db.fetchrow("SELECT * FROM members WHERE mid = $1;", user.id)
+        if not data:
             await ctx.channel.send(f"{user.display_name} is not a member")
             return
 
-        if self.members[user]["active"]:
+        if user in self.loops:
             await ctx.channel.send(f"{user.display_name} is already active")
             return
 
-        self.members[user]["active"] = True
+        task = tasks.loop(seconds=5.0)(self.track)
+        self.loops[user] = task
+        task.start(user)
         await ctx.channel.send(f"{user.display_name} is now active")
-        while True:
-            #### CAUTION ####
-            # TODO: this loop logic is eye bleach, it is very very bad
-            # ideally, you wanna use something built into discord.py
-            # like tasks.loop or something similar
-
-            # wait for a valid interval to occur
-            while (
-                not in_time_range(
-                    self.members[user]["start_time"],
-                    current_time(),
-                    self.members[user]["end_time"],
-                )
-                or (not self.members[user]["weekends"] and is_a_weekend(current_date()))
-            ) and self.members[user]["active"]:
-                await asyncio.sleep(20)
-
-            # during a valid time interval, check if user joins the voice channel
-            while (
-                in_time_range(
-                    self.members[user]["start_time"],
-                    current_time(),
-                    self.members[user]["end_time"],
-                )
-                and self.members[user]["active"]
-            ):
-                # say good morning if they've joined the voice channel (only do it once)
-                if user in self.voice.members and not self.members[user]["woke_up"]:
-                    self.members[user]["woke_up"] = True
-                    await self.chat.send(f"Good morning {user.mention}!")
-                await asyncio.sleep(20)
-
-            # if deactivate was called stop the loop and reset vars
-            if not self.members[user]["active"]:
-                self.members[user]["active"] = False
-                self.members[user]["woke_up"] = False
-                return
-
-            # if they never joined the voice channel, then send an passive aggressive message
-            if not self.members[user]["woke_up"]:
-                await self.chat.send(
-                    f"{user.mention}, you didn't wake up today eh. Big lack."
-                )
-
-            # reset variable that tracks if they woke up (ie joined the voice channel)
-            self.members[user]["woke_up"] = False
 
     @commands.command(brief="Deactivate tracking for a user")
     async def deactivate(self, ctx, user: discord.Member):
@@ -184,19 +201,18 @@ class RiseNGrind(commands.Cog):
         --------
         !deactivate @janedoe
         """
-        if user not in self.members:
+        data = await self.db.fetchrow("SELECT * FROM members WHERE mid = $1;", user.id)
+        if not data:
             await ctx.channel.send(f"{user.display_name} is not a member")
             return
 
-        if not self.members[user]["active"]:
+        if user not in self.loops:
             await ctx.channel.send(f"{user.display_name} is already inactive")
             return
 
-        self.members[user]["active"] = False
-        await ctx.channel.send(
-            "deactivating may take up to a minute, "
-            f"use '!info {user.display_name}' after a minute check if they were deactivated"
-        )
+        self.loops[user].stop()
+        await ctx.channel.send(f"{user.display_name} has been dactivated")
+        del self.loops[user]
 
     @commands.command(brief="Add user to the morning club")
     async def add(
@@ -214,7 +230,9 @@ class RiseNGrind(commands.Cog):
         !add @janedoe 06:30:00 7:00:00 yes
         !add @janedoe 12:00:00 13:00:00 no
         """
-        _exists = await self.db.fetch(f"SELECT * FROM members WHERE mid = $1;", user.id)
+        _exists = await self.db.fetchrow(
+            "SELECT * FROM members WHERE mid = $1;", user.id
+        )
         if _exists:
             await ctx.channel.send(
                 f"{user.display_name} is already in the club, please use the "
@@ -232,8 +250,8 @@ class RiseNGrind(commands.Cog):
         async with self.db.transaction():
             await self.db.execute(
                 "INSERT INTO members "
-                "(mid, start_time, end_time, active, weekends) "
-                f"VALUES ($1, $2, $3, false, $4);",
+                "(mid, start_time, end_time, weekends) "
+                "VALUES ($1, $2, $3, $4);",
                 user.id,
                 start_time,
                 end_time,
@@ -249,9 +267,17 @@ class RiseNGrind(commands.Cog):
         --------
         !remove @janedoe
         """
-        _exists = await self.db.fetch(f"SELECT * FROM members WHERE mid = $1;", user.id)
+        _exists = await self.db.fetchrow(
+            "SELECT * FROM members WHERE mid = $1;", user.id
+        )
         if not _exists:
             await ctx.channel.send(f"{user.display_name} is not a member")
+            return
+
+        if user in self.loops:
+            await ctx.channel.send(
+                f"{user.display_name} please deactivate user before removing"
+            )
             return
 
         async with self.db.transaction():
@@ -274,9 +300,12 @@ class RiseNGrind(commands.Cog):
         """
         # TODO: prettier info stuff
         if not user:
-            message = str(await self.db.fetch("SELECT * FROM members;"))
-            message += "\n"
+            message = "Config: "
             message += str(await self.db.fetchrow("SELECT * FROM configs WHERE cid=0;"))
+            message += "\n\nActive Members: "
+            message += str([k.display_name for k in self.loops])
+            message += "\n\nMembers: "
+            message += str(await self.db.fetch("SELECT * FROM members;"))
         else:
             data = await self.db.fetchrow(
                 "SELECT * FROM members WHERE mid = $1;", user.id
