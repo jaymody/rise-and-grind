@@ -115,7 +115,7 @@ class RiseNGrind(commands.Cog):
             l.cancel()
         await self.db.close()
 
-    @commands.command(brief="Shuts down the bot", pass_context=False)
+    @commands.command(brief="Shuts down the bot")
     async def shutdown(self, ctx):
         """Shuts down the bot"""
         await self.close()
