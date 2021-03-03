@@ -62,6 +62,7 @@ class RiseNGrind(commands.Cog):
             start_time TIME(0) NOT NULL,
             end_time TIME(0) NOT NULL,
             weekends BOOLEAN NOT NULL,
+            active BOOLEAN NOT NULL DEFAULT false,
             PRIMARY KEY (mid)
         );
         """
@@ -106,6 +107,13 @@ class RiseNGrind(commands.Cog):
                 )
 
         self.loops = {}
+        members = await self.db.fetch("SELECT * FROM members;")
+        for member in members:
+            if member["active"]:
+                user = self.bot.get_user(member["mid"])
+                task = tasks.loop(count=1)(self.notify)
+                self.loops[user] = task
+                task.start(user, member)
 
         print(f"ready {current_datetime()}")
 
@@ -251,6 +259,14 @@ class RiseNGrind(commands.Cog):
         task = tasks.loop(count=1)(self.notify)
         self.loops[user] = task
         task.start(user, data)
+
+        async with self.db.acquire() as con:
+            async with con.transaction():
+                await con.execute(
+                    "UPDATE members SET active=true WHERE mid=$1;",
+                    user.id,
+                )
+
         await ctx.channel.send(f"{user.display_name} is now active")
 
     @commands.command(brief="Deactivate tracking for a user")
@@ -274,6 +290,14 @@ class RiseNGrind(commands.Cog):
 
         self.loops[user].cancel()
         del self.loops[user]
+
+        async with self.db.acquire() as con:
+            async with con.transaction():
+                await con.execute(
+                    "UPDATE members SET active=false WHERE mid=$1;",
+                    user.id,
+                )
+
         await ctx.channel.send(f"{user.display_name} has been deactivated")
 
     @commands.command(brief="Fetch mornings data")
