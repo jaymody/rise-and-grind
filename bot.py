@@ -199,7 +199,6 @@ class RiseNGrind(commands.Cog):
             # number of seconds between tmrw and today
             seconds = (tmrw - today).total_seconds()
             if seconds > 0:
-                print(seconds)
                 await asyncio.sleep(seconds)
 
             # NOTE: since the process has been slept for about a day, tmrw is going to be
