@@ -1,9 +1,12 @@
+import io
 import os
 import time
+import random
 import asyncio
 import argparse
 import datetime
 
+import aiohttp
 import asyncpg
 import discord
 from discord.ext import commands, tasks
@@ -11,11 +14,63 @@ from discord.utils import find
 
 from utils import current_time, current_datetime, in_time_range, is_a_weekend
 
+awake_messages = {
+    "Good morning {}!": [
+        "https://tenor.com/view/plankton-sip-coffee-morning-spongebob-squarepants-gif-9320632",
+        "https://tenor.com/view/good-morning-morning-spongebob-squarepants-wake-up-gif-4298063",
+        "https://tenor.com/view/good-morning-spongebob-squarepants-underwear-gif-18343124",
+        "https://giphy.com/gifs/huptechweb-good-morning-goodmorning-huptech-web-f3p4Hz9b7QZmR2C8HH",
+        "https://tenor.com/view/good-morning-kittens-cats-gif-10926774",
+        "https://tenor.com/view/spingebob-good-morning-breakfast-gif-13589265",
+    ],
+    "Mornin {}!": [
+        "https://tenor.com/view/polar-bear-lazy-slide-walk-gif-3478099",
+        "https://tenor.com/view/good-morning-funny-animals-insomnia-cat-tired-crazy-cute-gif-11458685",
+        "https://tenor.com/view/tom-and-jerry-tom-falling-asleep-too-sleepy-sleepy-gif-4775523",
+        "https://tenor.com/view/good-morning-coffee-grinch-gif-13099550",
+    ],
+}
+
+sleep_messages = {
+    "live look at lacker {} rn": [
+        "https://tenor.com/view/stanley-sleeping-the-office-gif-10555880",
+        "https://tenor.com/view/looney-tunes-quarantine-sleeping-sleeping-beauty-beauty-sleep-gif-16980796",
+        "https://tenor.com/view/sleeping-spongebob-squarepants-good-morning-gif-16129628",
+        "https://tenor.com/view/patrick-sleeping-bed-spongebob-gif-7518157",
+    ],
+    "Everyone else: Rising and grinding\n{}:": [
+        "https://tenor.com/view/stanley-sleeping-the-office-gif-10555880",
+        "https://tenor.com/view/looney-tunes-quarantine-sleeping-sleeping-beauty-beauty-sleep-gif-16980796",
+        "https://tenor.com/view/sleeping-spongebob-squarepants-good-morning-gif-16129628",
+        "https://tenor.com/view/patrick-sleeping-bed-spongebob-gif-7518157",
+    ],
+    "I'm not mad {}, i'm just dissapointed": [
+        "https://tenor.com/view/disappointed-disappointed-fan-seriously-what-are-you-doing-judging-you-gif-17485289",
+        "https://tenor.com/view/blank-stare-really-idontbelieveyou-side-gif-6151149",
+        "https://giphy.com/gifs/memecandy-f9SHIwWujP27vxgHQe",
+        "https://tenor.com/view/star-wars-yoda-sad-disappointed-am-i-mandalorian-gif-15937614",
+    ],
+}
+
+
 # TODO
 def check():
     # check that text and voice channels are set and valid
     # check that on_ready has run
     pass
+
+
+async def get_random_message(message_list, mention):
+    timeout = aiohttp.ClientTimeout(total=10)
+    message, url_list = random.choice(list(message_list.items()))
+    url = random.choice(url_list)
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        async with session.get(url) as resp:
+            if resp.status != 200:
+                return None
+            data = io.BytesIO(await resp.read())
+            message = message.format(mention)
+            return message, discord.File(data, "morning.gif")
 
 
 class RiseNGrind(commands.Cog):
@@ -177,6 +232,13 @@ class RiseNGrind(commands.Cog):
                         user.id,
                         today,
                     )
+                try:
+                    resp = await get_random_message(awake_messages, user.mention)
+                    if resp is None:
+                        raise Exception
+                    message, gif = resp
+                    await self.chat.send(message, file=gif)
+                except:  # TODO find which timeout exception get's thrown
                     await self.chat.send(f"Good morning {user.mention}!")
 
     async def notify(self, user, data):
@@ -232,9 +294,16 @@ class RiseNGrind(commands.Cog):
                             user.id,
                             tmrw,
                         )
-                    await self.chat.send(
-                        f"{user.mention}, you didn't wake up today eh. Big lack."
-                    )
+                    try:
+                        resp = await get_random_message(sleep_messages, user.mention)
+                        if resp is None:
+                            raise Exception
+                        message, gif = resp
+                        await self.chat.send(message, file=gif)
+                    except:  # TODO find which timeout exception get's thrown
+                        await self.chat.send(
+                            f"{user.mention}, you didn't wake up today eh. Big lack."
+                        )
 
     @commands.command(brief="Activate tracking for a user")
     async def activate(self, ctx, user: discord.Member):
