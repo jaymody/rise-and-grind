@@ -61,16 +61,10 @@ def check():
 
 
 async def get_random_message(message_list, mention):
-    timeout = aiohttp.ClientTimeout(total=10)
     message, url_list = random.choice(list(message_list.items()))
+    message = message.format(mention)
     url = random.choice(url_list)
-    async with aiohttp.ClientSession(timeout=timeout) as session:
-        async with session.get(url) as resp:
-            if resp.status != 200:
-                return None
-            data = io.BytesIO(await resp.read())
-            message = message.format(mention)
-            return message, discord.File(data, "morning.gif")
+    return message + "\n" + url
 
 
 class RiseNGrind(commands.Cog):
@@ -232,14 +226,8 @@ class RiseNGrind(commands.Cog):
                         user.id,
                         today,
                     )
-                try:
-                    resp = await get_random_message(awake_messages, user.mention)
-                    if resp is None:
-                        raise Exception
-                    message, gif = resp
-                    await self.chat.send(message, file=gif)
-                except:  # TODO find which timeout exception get's thrown
-                    await self.chat.send(f"Good morning {user.mention}!")
+                mess = get_random_message(awake_messages, user.mention)
+                await self.chat.send(mess)
 
     async def notify(self, user, data):
         """Main notify logic."""
@@ -294,16 +282,8 @@ class RiseNGrind(commands.Cog):
                             user.id,
                             tmrw,
                         )
-                    try:
-                        resp = await get_random_message(sleep_messages, user.mention)
-                        if resp is None:
-                            raise Exception
-                        message, gif = resp
-                        await self.chat.send(message, file=gif)
-                    except:  # TODO find which timeout exception get's thrown
-                        await self.chat.send(
-                            f"{user.mention}, you didn't wake up today eh. Big lack."
-                        )
+                    mess = get_random_message(sleep_messages, user.mention)
+                    await self.chat.send(mess)
 
     @commands.command(brief="Activate tracking for a user")
     async def activate(self, ctx, user: discord.Member):
