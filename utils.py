@@ -10,7 +10,7 @@ def current_time():
 
 
 def is_a_weekend(date):
-    return date.weekday() > 5
+    return date.weekday() >= 5
 
 
 def in_time_range(start, now, end):
