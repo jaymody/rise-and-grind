@@ -1,4 +1,3 @@
-import io
 import os
 import time
 import random
@@ -6,7 +5,6 @@ import asyncio
 import argparse
 import datetime
 
-import aiohttp
 import asyncpg
 import discord
 from discord.ext import commands, tasks
@@ -60,7 +58,7 @@ def check():
     pass
 
 
-async def get_random_message(message_list, mention):
+def get_random_message(message_list, mention):
     message, url_list = random.choice(list(message_list.items()))
     message = message.format(mention)
     url = random.choice(url_list)
