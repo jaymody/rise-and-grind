@@ -248,8 +248,6 @@ class RiseNGrind(commands.Cog):
             seconds = (tmrw - today).total_seconds()
             if seconds > 0:
                 await asyncio.sleep(seconds)
-            if not data["weekends"] and is_a_weekend(current_datetime()):
-                continue
 
             # NOTE: since the process has been slept for about a day, tmrw is going to be
             # the current date most likely, unless end_time is very close to midnight
