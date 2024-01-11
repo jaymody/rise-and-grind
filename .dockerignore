@@ -1,5 +1,3 @@
-.env
-
 _*.ipynb
 .venv/
 __pycache__/
