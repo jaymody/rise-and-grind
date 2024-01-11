@@ -5,6 +5,7 @@ discord.log
 data.csv
 todo.md
 .envrc
+_*.ipynb
 
 
 ### Python ###

@@ -1,0 +1,7 @@
+export DISCORD_TOKEN=<token fetched from bot > copy token in the discord developer console for the bot>
+export DISCORD_GUILD=<after adding the bot to the discord server with admin priveleges, get it's ID via "Copy Id" when you right click the server in discord>
+export DB_NAME="<DB NAME HERE>"
+export DB_USER="<DB USERNAME HERE>"
+export DB_PASS="<DB PASSWORD HERE>"
+export DB_HOST="<DB HOST HERE>"
+export DB_PORT="<DB PORT HERE>"

@@ -1,16 +1,14 @@
-import os
-import time
-import random
-import asyncio
 import argparse
+import asyncio
 import datetime
+import os
+import random
+import time
 
 import asyncpg
 import discord
 from discord.ext import commands, tasks
 from discord.utils import find
-
-from utils import current_time, current_datetime, in_time_range, is_a_weekend
 
 awake_messages = {
     "Good morning {}!": [
@@ -51,6 +49,25 @@ sleep_messages = {
 }
 
 
+def current_datetime():
+    return datetime.datetime.now()
+
+
+def current_time():
+    return datetime.datetime.now().time()
+
+
+def is_a_weekend(date):
+    return date.weekday() >= 5
+
+
+def in_time_range(start, now, end):
+    if start < end:
+        return now >= start and now <= end
+    else:  # time interval crosses midnight
+        return now >= start or now <= end
+
+
 # TODO
 def check():
     # check that text and voice channels are set and valid
@@ -89,7 +106,7 @@ class RiseNGrind(commands.Cog):
             return
 
         # find the current guild
-        self.guild = find(lambda x: x.id == self.guild_id, bot.guilds)
+        self.guild = find(lambda x: x.id == self.guild_id, self.bot.guilds)
 
         # database connector
         self.db = await asyncpg.create_pool(
@@ -166,15 +183,15 @@ class RiseNGrind(commands.Cog):
 
     async def close(self):
         """Closes bot stuff"""
-        for l in self.loops.values():
-            l.cancel()
+        for loop in self.loops.values():
+            loop.cancel()
         await self.db.close()
 
     @commands.command(brief="Shuts down the bot")
     async def shutdown(self, ctx):
         """Shuts down the bot"""
         await self.close()
-        await bot.close()
+        await self.bot.close()
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, user, before, after):
@@ -565,7 +582,7 @@ class RiseNGrind(commands.Cog):
         await ctx.channel.send(f"voice channel set to {self.voice.name}")
 
 
-if __name__ == "__main__":
+async def main():
     # cli
     parser = argparse.ArgumentParser()
     parser.add_argument("--dev", action="store_true")
@@ -596,14 +613,11 @@ if __name__ == "__main__":
         db_host=os.environ["DB_HOST"],
         db_port=os.environ["DB_PORT"],
     )
-    bot.add_cog(risengrind)
+    await bot.add_cog(risengrind)
 
-    try:
-        loop = asyncio.get_event_loop()
-        loop.run_until_complete(bot.start(os.environ["DISCORD_TOKEN"]))
-    except KeyboardInterrupt:
-        loop.run_until_complete(risengrind.close())
-        loop.run_until_complete(bot.close())
-        print("\n\ngraceful interrupt")
-    finally:
-        loop.close()
+    # start the bot
+    await bot.start(os.environ["DISCORD_TOKEN"])
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
